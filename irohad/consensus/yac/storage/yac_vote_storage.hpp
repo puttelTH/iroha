@@ -23,9 +23,11 @@
 #include <vector>
 
 #include <boost/optional.hpp>
+
 #include "consensus/yac/messages.hpp"  // because messages passed by value
 #include "consensus/yac/storage/storage_result.hpp"  // for Answer
 #include "consensus/yac/storage/yac_common.hpp"      // for ProposalHash
+#include "consensus/yac/storage/yac_storage_cleanup_strategy.hpp"
 #include "consensus/yac/yac_types.hpp"
 
 namespace iroha {
@@ -87,10 +89,21 @@ namespace iroha {
          * This parameter used on creation of proposal storage
          * @return - iter for required proposal storage
          */
-        auto findProposalStorage(const VoteMessage &msg,
-                                 PeersNumberType peers_in_round);
+        boost::optional<std::vector<YacProposalStorage>::iterator>
+        findProposalStorage(const VoteMessage &msg,
+                            PeersNumberType peers_in_round);
+
+        /**
+         * Remove proposal storage by round
+         */
+        void removeByRound(const Round &round);
 
        public:
+        /**
+         * @param cleanup_strategy - strategy for removing elements from storage
+         */
+        YacVoteStorage(std::shared_ptr<CleanupStrategy> cleanup_strategy);
+
         // --------| public api |--------
 
         /**
@@ -143,6 +156,12 @@ namespace iroha {
          */
         std::unordered_map<Round, ProposalState, RoundTypeHasher>
             processing_state_;
+
+        /**
+         * Provides strategy managing rounds (adding and removing) for the
+         * storage
+         */
+        std::shared_ptr<CleanupStrategy> strategy_;
       };
 
     }  // namespace yac
