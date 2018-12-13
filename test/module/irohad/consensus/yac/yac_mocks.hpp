@@ -11,6 +11,7 @@
 #include "consensus/yac/cluster_order.hpp"
 #include "consensus/yac/messages.hpp"
 #include "consensus/yac/storage/yac_proposal_storage.hpp"
+#include "consensus/yac/storage/yac_storage_cleanup_strategy_impl.hpp"
 #include "consensus/yac/supermajority_checker.hpp"
 #include "consensus/yac/timer.hpp"
 #include "consensus/yac/yac.hpp"
@@ -222,12 +223,30 @@ namespace iroha {
             hasReject, bool(PeersNumberType, PeersNumberType, PeersNumberType));
       };
 
+      class MockCleanupStrategy : public CleanupStrategy {
+       public:
+        MOCK_METHOD2(finalize,
+                     boost::optional<CleanupStrategy::RoundsType>(
+                         Round round, Answer answer));
+
+        MOCK_METHOD1(shouldCreateRound, bool(const Round &round));
+      };
+
+      std::ostream & operator<<(std::ostream &os, const CommitMessage &) {
+        return os;
+      }
+
+      std::ostream & operator<<(std::ostream &os, const RejectMessage &) {
+        return os;
+      }
+
       class YacTest : public ::testing::Test {
        public:
         // ------|Network|------
         std::shared_ptr<MockYacNetwork> network;
         std::shared_ptr<MockYacCryptoProvider> crypto;
         std::shared_ptr<MockTimer> timer;
+        std::shared_ptr<MockCleanupStrategy> cleanup_strategy;
         std::shared_ptr<Yac> yac;
 
         // ------|Round|------
@@ -245,6 +264,13 @@ namespace iroha {
           network = std::make_shared<MockYacNetwork>();
           crypto = std::make_shared<MockYacCryptoProvider>();
           timer = std::make_shared<MockTimer>();
+
+          cleanup_strategy = std::make_shared<MockCleanupStrategy>();
+          ON_CALL(*cleanup_strategy, finalize(testing::_, testing::_))
+              .WillByDefault(testing::Return(boost::none));
+          ON_CALL(*cleanup_strategy, shouldCreateRound(testing::_))
+              .WillByDefault(testing::Return(true));
+
           auto ordering = ClusterOrdering::create(default_peers);
           ASSERT_TRUE(ordering);
           initYac(ordering.value());
@@ -255,7 +281,11 @@ namespace iroha {
         }
 
         void initYac(ClusterOrdering ordering) {
-          yac = Yac::create(YacVoteStorage(), network, crypto, timer, ordering);
+          yac = Yac::create(YacVoteStorage(cleanup_strategy),
+                            network,
+                            crypto,
+                            timer,
+                            ordering);
           network->subscribe(yac);
         }
       };
